@@ -4,7 +4,6 @@ services:
     pull_policy: always
     container_name: superdufs-app
     restart: always
-    user: "${DUFS_UID:-1000}:${DUFS_GID:-1000}"
     volumes:
       - data:/data
       - resume:/opt/playback-resume
