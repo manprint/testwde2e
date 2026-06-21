@@ -1,0 +1,33 @@
+services:
+  superdufs-app:
+    image: fabiop85/superdufs:player
+    pull_policy: always
+    container_name: superdufs-app
+    restart: always
+    user: "${DUFS_UID:-1000}:${DUFS_GID:-1000}"
+    volumes:
+      - data:/data
+      - resume:/opt/playback-resume
+    command: >-
+      /data
+      -A
+      -a admin:test2026@/:rw
+      --playback-resume-enabled=true
+      --playback-resume-dir=/opt/playback-resume
+      --publink-enabled
+      --enable-data-stats
+      --show-concurrent-uploads-settings
+      --resilient-player-max-retry=20
+      --resilient-player-reconnect-interval=10
+  superdufs-proxy:
+    image: quay.io/devdockops/autossh
+    depends_on:
+      - superdufs-app
+    pull_policy: always
+    container_name: superdufs-proxy
+    restart: always
+    command: ["-p", "443", "-R", "dufs-test-gh:80:superdufs-app:5000", "prx.adiprint.it"]
+
+volumes:
+  data:
+  resume:

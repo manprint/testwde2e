@@ -1,0 +1,44 @@
+name: Docker Compose Up
+
+on:
+  workflow_dispatch:
+    inputs:
+      follow:
+        description: "Tieni viva la run seguendo i log (docker compose logs -f)"
+        type: boolean
+        default: true
+      tail:
+        description: "Righe di log storico da mostrare prima del follow (numero o 'all')"
+        type: string
+        default: "all"
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Versioni Docker / Compose
+        run: |
+          docker version
+          docker compose version
+
+      - name: Compose up (detached)
+        run: docker compose -f compose.yml up -d --pull always
+
+      - name: Stato container
+        run: docker compose -f compose.yml ps
+
+      - name: Follow logs (mantiene la run attiva)
+        if: ${{ inputs.follow }}
+        run: docker compose -f compose.yml logs -f --no-color --tail "${{ inputs.tail }}"
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f compose.yml down -v --remove-orphans || true
