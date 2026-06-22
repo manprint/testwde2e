@@ -1,39 +1,11 @@
 services:
-  superdufs-app:
-    image: fabiop85/superdufs:player
-    pull_policy: always
-    container_name: superdufs-app
-    restart: always
-    volumes:
-      - data:/data
-      - resume:/opt/playback-resume
-    command: >-
-      /data
-      -A
-      -a admin:test2026@/:rw
-      --playback-resume-enabled=true
-      --playback-resume-dir=/opt/playback-resume
-      --publink-enabled
-      --enable-data-stats
-      --show-concurrent-uploads-settings
-      --resilient-player-max-retry=20
-      --resilient-player-reconnect-interval=10
-  superdufs-proxy:
-    image: quay.io/devdockops/autossh
-    depends_on:
-      - superdufs-app
-    pull_policy: always
-    container_name: superdufs-proxy
-    restart: always
-    command: ["-p", "443", "-R", "dufs-test-gh:80:superdufs-app:5000", "prx.adiprint.it"]
   proxy-ssh:
     image: quay.io/devdockops/autossh
     network_mode: host
     pull_policy: always
     container_name: proxy-ssh
     restart: always
-    command: ["-p", "443", "-R", "gh-proxy:80:localhost:22", "prx.adiprint.it", "tcp-alias=true"]
-
-volumes:
-  data:
-  resume:
+    environment:
+      - SISH_TCP_ALIAS=true
+      - SISH_NOTE="ssh proxy avviato su gh-test-vm"
+    command: -o SendEnv=SISH_NOTE -o SendEnv=SISH_TCP_ALIAS -p 443 -R gh-proxy:2222:localhost:22 prx.adiprint.it
