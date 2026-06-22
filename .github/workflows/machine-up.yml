@@ -27,10 +27,11 @@ jobs:
       - name: Configurazione VM e utente
         run: |
           # Aggiorna il sistema
-          sudo apt update && sudo apt upgrade -y
+          #sudo apt update && sudo apt upgrade -y
           
           # Installa utili
-          sudo apt install -y curl wget sudo openssh-server git
+          # sudo apt install -y curl wget sudo openssh-server git
+          sudo apt install -y byobu tmux htop net-tools iputils-ping
           
           # Controlla se esiste già un utente con uid 1000
           EXISTING_USER=$(getent passwd 1000 | cut -d: -f1)
