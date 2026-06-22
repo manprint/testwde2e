@@ -128,17 +128,19 @@ jobs:
 
       - name: Compose up (detached)
         run: |
-          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml up -d --pull always
+          # Docker gira come root (ha permessi sul repo)
+          # TARGET_USER è nel gruppo docker quindi può usare docker senza sudo
+          docker compose -f compose-machine.yml up -d --pull always
 
       - name: Stato container
         run: |
-          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml ps
+          docker compose -f compose-machine.yml ps
 
       - name: Follow logs (mantiene la run attiva)
         if: ${{ inputs.follow }}
-        run: sudo -u "$TARGET_USER" docker compose -f compose-machine.yml logs -f --no-color --tail "${{ inputs.tail }}"
+        run: docker compose -f compose-machine.yml logs -f --no-color --tail "${{ inputs.tail }}"
 
       - name: Teardown
         if: always()
         run: |
-          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml down -v --remove-orphans || true
+          docker compose -f compose-machine.yml down -v --remove-orphans || true
