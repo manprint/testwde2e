@@ -1,0 +1,128 @@
+name: Machine Up
+
+on:
+  workflow_dispatch:
+    inputs:
+      follow:
+        description: "Tieni viva la run seguendo i log (docker compose logs -f)"
+        type: boolean
+        default: true
+      tail:
+        description: "Righe di log storico da mostrare prima del follow (numero o 'all')"
+        type: string
+        default: "all"
+
+permissions:
+  contents: read
+
+jobs:
+  machine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configurazione VM e utente
+        run: |
+          # Aggiorna il sistema
+          sudo apt update && sudo apt upgrade -y
+          
+          # Installa utili
+          sudo apt install -y curl wget sudo openssh-server git
+          
+          # Controlla se esiste già un utente con uid 1000
+          EXISTING_USER=$(getent passwd 1000 | cut -d: -f1)
+          
+          if [ -n "$EXISTING_USER" ]; then
+            echo "Trovato utente con uid 1000: $EXISTING_USER"
+            TARGET_USER="$EXISTING_USER"
+          else
+            echo "Nessun utente con uid 1000, creazione user1000"
+            sudo useradd -m -d /home/user1000 -u 1000 -s /bin/bash -G sudo user1000
+            TARGET_USER="user1000"
+          fi
+          
+          # Imposta password per l'utente target
+          echo "$TARGET_USER:password1000" | sudo chpasswd
+          
+          # Aggiungi l'utente al gruppo sudo se non è già
+          sudo usermod -aG sudo "$TARGET_USER" 2>/dev/null || true
+          
+          # Consenti all'utente di usare sudo senza password
+          echo "$TARGET_USER ALL=(ALL:ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/"$TARGET_USER" > /dev/null
+          
+          # Avvia servizio SSH
+          sudo systemctl start ssh
+          sudo systemctl enable ssh
+          
+          # Configura SSH per ascoltare sulla porta 22
+          echo "Port 22" | sudo tee -a /etc/ssh/sshd_config
+          
+          # Export per usage nei step successivi
+          echo "TARGET_USER=$TARGET_USER" >> $GITHUB_ENV
+
+      - name: Configura chiave pubblica SSH
+        run: |
+          # Leggi la chiave pubblica dal repository
+          SSH_PUB_KEY=$(cat id_ed25519.pub)
+          
+          # Configura chiave pubblica per accesso senza password per l'utente target
+          HOME_DIR=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+          mkdir -p "$HOME_DIR/.ssh"
+          echo "$SSH_PUB_KEY" > "$HOME_DIR/.ssh/authorized_keys"
+          chmod 700 "$HOME_DIR/.ssh"
+          chmod 600 "$HOME_DIR/.ssh/authorized_keys"
+          chown -R "$TARGET_USER:$TARGET_USER" "$HOME_DIR/.ssh"
+
+      - name: Installazione Docker
+        run: |
+          # Controlla se Docker è già installato
+          if ! command -v docker &> /dev/null; then
+            echo "Docker non presente, installazione in corso..."
+            
+            # Rimuovi vecchie versioni
+            for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove -y $pkg; done 2>/dev/null || true
+            
+            # Installa Docker
+            sudo apt-get update
+            sudo apt-get install -y ca-certificates curl
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            
+            # Avvia e abilita Docker
+            sudo systemctl start docker
+            sudo systemctl enable docker
+          fi
+          
+          # Aggiungi l'utente target al gruppo docker
+          sudo usermod -aG docker "$TARGET_USER"
+
+      - name: Versioni Docker / Compose
+        run: |
+          docker version
+          docker compose version
+
+      - name: Compose up (detached)
+        run: |
+          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml up -d --pull always
+
+      - name: Stato container
+        run: |
+          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml ps
+
+      - name: Follow logs (mantiene la run attiva)
+        if: ${{ inputs.follow }}
+        run: sudo -u "$TARGET_USER" docker compose -f compose-machine.yml logs -f --no-color --tail "${{ inputs.tail }}"
+
+      - name: Teardown
+        if: always()
+        run: |
+          sudo -u "$TARGET_USER" docker compose -f compose-machine.yml down -v --remove-orphans || true
