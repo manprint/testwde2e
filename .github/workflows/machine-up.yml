@@ -38,10 +38,17 @@ jobs:
           if [ -n "$EXISTING_USER" ]; then
             echo "Trovato utente con uid 1000: $EXISTING_USER"
             TARGET_USER="$EXISTING_USER"
+            # Assicura che l'utente abbia un gruppo primario valido
+            PRIMARY_GID=$(getent passwd "$TARGET_USER" | cut -d: -f4)
+            if [ -z "$PRIMARY_GID" ] || [ "$PRIMARY_GID" = "0" ]; then
+              # Se non ha gid o è root, usa il suo proprio nome come gruppo
+              PRIMARY_GID="$TARGET_USER"
+            fi
           else
             echo "Nessun utente con uid 1000, creazione user1000"
             sudo useradd -m -d /home/user1000 -u 1000 -s /bin/bash -G sudo user1000
             TARGET_USER="user1000"
+            PRIMARY_GID="$TARGET_USER"
           fi
           
           # Imposta password per l'utente target
@@ -62,6 +69,7 @@ jobs:
           
           # Export per usage nei step successivi
           echo "TARGET_USER=$TARGET_USER" >> $GITHUB_ENV
+          echo "PRIMARY_GID=$PRIMARY_GID" >> $GITHUB_ENV
 
       - name: Configura chiave pubblica SSH
         run: |
@@ -70,11 +78,18 @@ jobs:
           
           # Configura chiave pubblica per accesso senza password per l'utente target
           HOME_DIR=$(getent passwd "$TARGET_USER" | cut -d: -f6)
-          mkdir -p "$HOME_DIR/.ssh"
-          echo "$SSH_PUB_KEY" > "$HOME_DIR/.ssh/authorized_keys"
-          chmod 700 "$HOME_DIR/.ssh"
-          chmod 600 "$HOME_DIR/.ssh/authorized_keys"
-          chown -R "$TARGET_USER:$TARGET_USER" "$HOME_DIR/.ssh"
+          
+          # Se home non esiste, crearla
+          if [ ! -d "$HOME_DIR" ]; then
+            sudo mkdir -p "$HOME_DIR"
+            sudo chown "$TARGET_USER:$PRIMARY_GID" "$HOME_DIR"
+          fi
+          
+          sudo mkdir -p "$HOME_DIR/.ssh"
+          echo "$SSH_PUB_KEY" | sudo tee "$HOME_DIR/.ssh/authorized_keys" > /dev/null
+          sudo chmod 700 "$HOME_DIR/.ssh"
+          sudo chmod 600 "$HOME_DIR/.ssh/authorized_keys"
+          sudo chown -R "$TARGET_USER:$PRIMARY_GID" "$HOME_DIR/.ssh"
 
       - name: Installazione Docker
         run: |
