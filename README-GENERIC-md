@@ -1,0 +1,9 @@
+# Generic
+
+```
+curl -o compose.yml -L "https://raw.githubusercontent.com/manprint/testwde2e/refs/heads/main/compose-sdufs.yml" && docker compose up -d
+```
+
+```
+docker run -it --pull always --rm --privileged --network host ghcr.io/manprint/bore:client vhost 127.0.0.1:5000 --subdomain dufsgh --id dufsgh5000 --udp --auto-reconnect -s token
+```
