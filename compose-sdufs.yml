@@ -7,6 +7,8 @@ services:
     volumes:
       - data:/data
       - resume:/opt/playback-resume
+    ports:
+      - "5000:5000"
     command: >-
       /data
       -A
