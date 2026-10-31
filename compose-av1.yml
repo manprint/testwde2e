@@ -1,0 +1,90 @@
+x-app-image: &app-image
+  image: "${AV1WC_IMAGE:-ghcr.io/manprint/av1webconverter:v1.1.2-pre}"
+
+services:
+  prepare-data:
+    <<: *app-image
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        install -d /data/in /data/out /data/state /data/logs
+        chown -R "$${PUID}:$${PGID}" /data
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+    volumes:
+      - av1-data:/data
+    network_mode: none
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  av1webconverter:
+    <<: *app-image
+    depends_on:
+      prepare-data:
+        condition: service_completed_successfully
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${AV1WC_HOST_IP:-127.0.0.1}:${AV1WC_HOST_PORT:-8080}:${AV1WC_PORT:-8080}/tcp"
+    volumes:
+      - av1-data:/data
+    environment:
+      AV1WC_CONFIG: "${AV1WC_CONFIG:-/etc/av1webconverter/config.toml}"
+      AV1WC_BIND: "${AV1WC_BIND:-0.0.0.0}"
+      AV1WC_PORT: "${AV1WC_PORT:-8080}"
+      AV1WC_MAX_UPLOAD_MB: "${AV1WC_MAX_UPLOAD_MB:-16000}"
+      AV1WC_AUTH_ENABLED: "${AV1WC_AUTH_ENABLED:-true}"
+      AV1WC_AUTH_USERNAME: "${AV1WC_AUTH_USERNAME:-admin}"
+      AV1WC_AUTH_PASSWORD: "${AV1WC_AUTH_PASSWORD:-gh-demo-pass}"
+      AV1WC_INPUT_DIR: "${AV1WC_INPUT_DIR:-/data/in}"
+      AV1WC_OUTPUT_DIR: "${AV1WC_OUTPUT_DIR:-/data/out}"
+      AV1WC_DATA_DIR: "${AV1WC_DATA_DIR:-/data/state}"
+      AV1WC_LOG_DIR: "${AV1WC_LOG_DIR:-/data/logs}"
+      AV1WC_FFMPEG_BIN: "${AV1WC_FFMPEG_BIN:-ffmpeg}"
+      AV1WC_FFPROBE_BIN: "${AV1WC_FFPROBE_BIN:-ffprobe}"
+      AV1WC_DEFAULT_CONCURRENCY: "${AV1WC_DEFAULT_CONCURRENCY:-1}"
+      AV1WC_SLACK_ENABLED: "${AV1WC_SLACK_ENABLED:-true}"
+      AV1WC_LOG_LEVEL: "${AV1WC_LOG_LEVEL:-info}"
+      AV1WC_LOG: "${AV1WC_LOG:-${AV1WC_LOG_LEVEL:-info}}"
+      AV1WC_CRF: "${AV1WC_CRF:-48}"
+      AV1WC_PRESET: "${AV1WC_PRESET:-1}"
+      AV1WC_SCALE_HEIGHT: "${AV1WC_SCALE_HEIGHT:-480}"
+      AV1WC_AUDIO_BITRATE: "${AV1WC_AUDIO_BITRATE:-48k}"
+      AV1WC_SVTAV1_PARAMS: "${AV1WC_SVTAV1_PARAMS:-tune=5}"
+      AV1WC_PROGRESS_INTERVAL: "${AV1WC_PROGRESS_INTERVAL:-5.0}"
+      AV1WC_MEASURE_VMAF: "${AV1WC_MEASURE_VMAF:-false}"
+      AV1WC_VMAF_MODEL: "${AV1WC_VMAF_MODEL:-vmaf_v1.0.16_5d0h}"
+      AV1WC_VMAF_SEGMENTS: "${AV1WC_VMAF_SEGMENTS:-3}"
+      AV1WC_CRF_TEST_STEPS: "${AV1WC_CRF_TEST_STEPS:-3}"
+      AV1WC_VMAF_TARGET: "${AV1WC_VMAF_TARGET:-93.0}"
+      AV1WC_VMAF_SEGMENT_DURATION_SECONDS: "${AV1WC_VMAF_SEGMENT_DURATION_SECONDS:-15}"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+  superdufs-proxy:
+    image: quay.io/devdockops/autossh
+    depends_on:
+      - av1webconverter
+    pull_policy: always
+    container_name: av1webconverter-proxy
+    restart: always
+    command: ["-p", "443", "-R", "av1gh:80:av1webconverter:8080", "sish.adiprint.it"]
+
+
+volumes:
+  av1-data:
