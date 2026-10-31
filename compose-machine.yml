@@ -8,4 +8,4 @@ services:
     environment:
       - SISH_TCP_ALIAS=true
       - SISH_NOTE="ssh proxy avviato su gh-test-vm"
-    command: -o SendEnv=SISH_NOTE -o SendEnv=SISH_TCP_ALIAS -p 443 -R gh-proxy:2222:localhost:22 prx.adiprint.it
+    command: -o SendEnv=SISH_NOTE -o SendEnv=SISH_TCP_ALIAS -p 443 -R gh-proxy:2222:localhost:22 sish.adiprint.it
