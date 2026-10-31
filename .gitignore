@@ -1,3 +1,5 @@
 note.ai
 README.md
 README-VM.md
+scripts/machine-up.sh
+scripts/machine-up-enter.sh
